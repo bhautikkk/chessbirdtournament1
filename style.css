@@ -23,7 +23,8 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
-    overflow: hidden;
+    overflow-y: auto;
+    overflow-x: hidden;
     position: relative;
     /* Background Image Effect */
     background: url('https://images.unsplash.com/photo-1610631066894-62452778e38f?q=80&w=2669&auto=format&fit=crop') no-repeat center center/cover;
@@ -450,6 +451,19 @@ input:focus {
 
     .lobby-content {
         flex-direction: column;
+    }
+
+    .screen {
+        align-items: flex-start;
+        padding: 20px 0;
+        overflow-y: auto;
+        height: auto;
+        min-height: 100%;
+        position: absolute;
+    }
+
+    body {
+        overflow-y: auto;
     }
 }
 
