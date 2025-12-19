@@ -64,6 +64,14 @@ body::before {
     display: none !important;
 }
 
+/* Reduced size for Copy Link Button in Lobby */
+.room-info .icon-btn {
+    padding: 4px 8px;
+    font-size: 0.9rem;
+    height: auto;
+    vertical-align: middle;
+}
+
 .screen.hidden {
     display: none;
     opacity: 0;
@@ -180,14 +188,25 @@ input:focus {
     width: 600px;
 }
 
+.lobby-card h1 {
+    font-size: 2rem;
+    margin-bottom: 0.2rem;
+    background: none !important;
+    -webkit-background-clip: border-box !important;
+    background-clip: border-box !important;
+    -webkit-text-fill-color: #fff !important;
+    color: #fff !important;
+    text-shadow: 0 0 10px rgba(129, 182, 76, 0.5);
+}
+
 .code-box {
     font-family: monospace;
-    font-size: 2rem;
+    font-size: 1.5rem;
     background: rgba(0, 0, 0, 0.3);
-    padding: 0.5rem 1rem;
+    padding: 0.3rem 0.8rem;
     border-radius: 8px;
     color: var(--primary-color);
-    letter-spacing: 5px;
+    letter-spacing: 3px;
     user-select: all;
     cursor: pointer;
 }
@@ -224,6 +243,27 @@ input:focus {
     list-style: none;
     max-height: 200px;
     overflow-y: auto;
+    /* Custom Scrollbar */
+    padding-right: 5px;
+    /* Prevent content overlap */
+}
+
+.player-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.player-list::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+}
+
+.player-list::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+}
+
+.player-list::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
 }
 
 .player-list li {
@@ -231,6 +271,10 @@ input:focus {
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     display: flex;
     justify-content: space-between;
+    margin-bottom: 5px;
+    /* Added spacing */
+    border-radius: 4px;
+    /* Optional: adds rounded corners if they have backgrounds */
 }
 
 .slots-container {
@@ -550,6 +594,24 @@ input,
 .action-controls {
     display: flex;
     gap: 5px;
+}
+
+.history-controls .icon-btn {
+    background: rgba(45, 45, 45, 1);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    width: 40px;
+    height: 40px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 1.2rem;
+    border-radius: 6px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+}
+
+.history-controls .icon-btn:hover {
+    background: rgba(60, 60, 60, 1);
+    border-color: rgba(255, 255, 255, 0.3);
 }
 
 .icon-btn {
@@ -880,4 +942,132 @@ input,
 .square.black .coord-rank,
 .square.black .coord-file {
     color: var(--board-white);
+}
+
+
+/* Shine Effect */
+@keyframes shineGlow {
+    0% {
+        text-shadow: 0 0 5px var(--shine-color, #ffd700), 0 0 10px var(--shine-color, #ffd700);
+        color: #fff;
+    }
+
+    50% {
+        text-shadow: 0 0 20px var(--shine-color, #ffd700), 0 0 40px var(--shine-color, #ffd700);
+        color: #fff;
+    }
+
+    100% {
+        text-shadow: 0 0 5px var(--shine-color, #ffd700), 0 0 10px var(--shine-color, #ffd700);
+        color: #fff;
+    }
+}
+
+.shining {
+    --shine-color: #ffd700;
+    /* Default Fallback */
+    animation: shineGlow 2s infinite alternate;
+    font-weight: bold;
+    border: 1px solid var(--shine-color, #ffd700) !important;
+    background: rgba(255, 255, 255, 0.05) !important;
+}
+
+.shining::after {
+    content: ' ⭐';
+}
+
+
+/* Admin Context Menu */
+.admin-menu {
+    position: fixed;
+    background: rgba(30, 30, 30, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.5);
+    border-radius: 8px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 1000;
+    backdrop-filter: blur(5px);
+    width: 150px;
+}
+
+.menu-title {
+    font-size: 0.9rem;
+    color: #aaa;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding-bottom: 5px;
+    margin-bottom: 5px;
+    text-align: center;
+    font-weight: bold;
+}
+
+.admin-menu button {
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    color: white;
+    padding: 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: 0.2s;
+}
+
+.admin-menu button:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.admin-menu .shine-btn {
+    background: rgba(255, 215, 0, 0.2);
+    color: #ffd700;
+}
+
+.admin-menu .shine-btn:hover {
+    background: rgba(255, 215, 0, 0.4);
+}
+
+/* Custom Modal */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10000;
+    backdrop-filter: blur(5px);
+}
+
+.modal-content {
+    background: linear-gradient(135deg, #1e1e1e, #252525);
+    padding: 2rem;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    text-align: center;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    min-width: 300px;
+    max-width: 90%;
+}
+
+.modal-content h2 {
+    margin-top: 0;
+    color: #fff;
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+.modal-content p {
+    color: #ccc;
+    font-size: 1.1rem;
+    margin-bottom: 2rem;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
 }

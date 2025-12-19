@@ -138,10 +138,8 @@
             <!-- History & Actions Bar -->
             <div class="control-bar">
                 <div class="history-controls">
-                    <button id="btnStart" class="icon-btn" title="Go to Start">|&lt;</button>
                     <button id="btnPrev" class="icon-btn" title="Previous Move">&lt;</button>
                     <button id="btnNext" class="icon-btn" title="Next Move">&gt;</button>
-                    <button id="btnEnd" class="icon-btn" title="Go to Recent">&gt;|</button>
                 </div>
                 <div class="action-controls" id="actionControls">
                     <button id="btnDraw" class="icon-btn action-btn bg-yellow" title="Offer Draw">🤝</button>
@@ -170,6 +168,19 @@
     </div>
 
     <!-- Socket.io -->
+    <!-- Custom Modal -->
+    <div id="customModal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2 id="modalTitle">Notice</h2>
+            <p id="modalMessage">Message content...</p>
+            <div class="modal-actions">
+                <button id="btnModalCancel" class="glow-btn hidden"
+                    style="background: #444; color: #ccc;">Cancel</button>
+                <button id="btnModalOk" class="glow-btn">OK</button>
+            </div>
+        </div>
+    </div>
+
     <script src="/socket.io/socket.io.js"></script>
     <!-- Chess.js Library -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.js"></script>

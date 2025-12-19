@@ -26,7 +26,7 @@ io.on('connection', (socket) => {
         rooms[roomCode] = {
             code: roomCode,
             admin: socket.id,
-            players: [{ id: socket.id, name: playerName }],
+            players: [{ id: socket.id, name: playerName, shineColor: null }],
             slots: {
                 white: null,
                 black: null
@@ -52,7 +52,7 @@ io.on('connection', (socket) => {
             // Check if already in room (simple check)
             const existingPlayer = room.players.find(p => p.id === socket.id);
             if (!existingPlayer) {
-                room.players.push({ id: socket.id, name: playerName });
+                room.players.push({ id: socket.id, name: playerName, shineColor: null });
             }
 
             socket.join(roomCode);
@@ -110,6 +110,23 @@ io.on('connection', (socket) => {
         }
     });
 
+    // Set Shine Color (Admin Only)
+    socket.on('set_shine_color', ({ roomCode, playerId, color }) => {
+        const room = rooms[roomCode];
+        if (room && room.admin === socket.id) {
+            const player = room.players.find(p => p.id === playerId);
+            if (player) {
+                // If color is present, set it. If null, remove it (disable shine)
+                player.shineColor = color || null;
+                // isShining can still be used as a simple boolean flag if needed by client,
+                // but relying on shineColor being truthy is better.
+                // Let's keep isShining synced for backward compatibility if we want, or just drop it.
+                // Better: Client checks if (p.shineColor)
+                io.to(roomCode).emit('update_lobby', room);
+            }
+        }
+    });
+
     // Start Game (Admin Only)
     socket.on('start_game', (roomCode) => {
         const room = rooms[roomCode];
@@ -129,6 +146,37 @@ io.on('connection', (socket) => {
                 console.log(`Game started in room ${roomCode}`);
             } else {
                 socket.emit('error_message', 'Both slots must be filled to start.');
+            }
+        }
+    });
+
+    // Remove from Slot (Admin Only)
+    socket.on('remove_from_slot', ({ roomCode, slot }) => {
+        const room = rooms[roomCode];
+        if (room && room.admin === socket.id) {
+            if (room.slots[slot]) {
+                room.slots[slot] = null;
+                io.to(roomCode).emit('update_lobby', room);
+            }
+        }
+    });
+
+    // Kick Player (Admin Only)
+    socket.on('kick_player', ({ roomCode, playerId }) => {
+        const room = rooms[roomCode];
+        if (room && room.admin === socket.id) {
+            // Remove from slots if present
+            if (room.slots.white && room.slots.white.id === playerId) room.slots.white = null;
+            if (room.slots.black && room.slots.black.id === playerId) room.slots.black = null;
+
+            // Remove from player list
+            const index = room.players.findIndex(p => p.id === playerId);
+            if (index !== -1) {
+                room.players.splice(index, 1);
+                // Notify kicked player
+                io.to(playerId).emit('kicked');
+                // Update room for others
+                io.to(roomCode).emit('update_lobby', room);
             }
         }
     });
@@ -262,50 +310,38 @@ io.on('connection', (socket) => {
     });
 
     socket.on('disconnect', () => {
-        console.log('User disconnected:', socket.id);
-        // Handle cleanup
-        for (const code in rooms) {
-            const room = rooms[code];
-            const playerIndex = room.players.findIndex(p => p.id === socket.id);
-            if (playerIndex !== -1) {
-                room.players.splice(playerIndex, 1);
+        console.log(`User disconnected: ${socket.id}`);
+        // Remove player from all rooms they are in
+        for (const roomCode in rooms) {
+            const room = rooms[roomCode];
 
-                // Check if they were a player
-                const isWhite = room.slots.white && room.slots.white.id === socket.id;
-                const isBlack = room.slots.black && room.slots.black.id === socket.id;
-                const wasPlayer = isWhite || isBlack;
+            // If Admin leaves -> Close Room
+            if (room.admin === socket.id) {
+                io.to(roomCode).emit('room_closed');
+                delete rooms[roomCode];
+                console.log(`Room ${roomCode} closed (Admin left)`);
+                continue; // Stop processing this room
+            }
 
-                // Clear slots if they left
-                if (isWhite) room.slots.white = null;
-                if (isBlack) room.slots.black = null;
+            // Regular player leaves
+            const index = room.players.findIndex(p => p.id === socket.id);
+            if (index !== -1) {
+                room.players.splice(index, 1);
 
-                // Stop game ONLY if an active player left
-                if (room.gameStarted && wasPlayer) {
-                    const winner = isWhite ? 'Black' : 'White';
-                    io.to(code).emit('game_over', {
-                        reason: 'Opponent Disconnected',
-                        winner: winner,
-                        message: 'Opponent Disconnected.'
-                    });
-                    room.gameStarted = false;
-                }
+                // Remove from slots if assigned
+                if (room.slots.white && room.slots.white.id === socket.id) room.slots.white = null;
+                if (room.slots.black && room.slots.black.id === socket.id) room.slots.black = null;
 
-                // If admin left
-                if (room.admin === socket.id) {
-                    if (room.players.length > 0) {
-                        room.admin = room.players[0].id; // Assign new admin
-                    }
-                }
-
-                io.to(code).emit('update_lobby', room);
-
-                // Clean empty room?
+                // Send update if room still exists
                 if (room.players.length === 0) {
-                    delete rooms[code];
+                    delete rooms[roomCode];
+                } else {
+                    io.to(roomCode).emit('update_lobby', room);
                 }
             }
         }
     });
+
 });
 
 const PORT = process.env.PORT || 3000;

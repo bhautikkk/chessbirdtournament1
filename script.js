@@ -26,6 +26,185 @@ const urlRoomCode = urlParams.get('room');
 
 // Lobby Elements
 const displayRoomCode = document.getElementById('displayRoomCode');
+
+// Modal Elements
+const customModal = document.getElementById('customModal');
+const modalTitle = document.getElementById('modalTitle');
+const modalMessage = document.getElementById('modalMessage');
+const btnModalCancel = document.getElementById('btnModalCancel');
+const btnModalOk = document.getElementById('btnModalOk');
+
+function showModal(message, onOk, showCancel = false, onCancel = null) {
+    modalMessage.innerText = message;
+    modalTitle.innerText = showCancel ? "Confirmation" : "Notice";
+
+    customModal.classList.remove('hidden');
+
+    if (showCancel) {
+        btnModalCancel.classList.remove('hidden');
+    } else {
+        btnModalCancel.classList.add('hidden');
+    }
+
+    // Clone buttons to remove old event listeners
+    const newOk = btnModalOk.cloneNode(true);
+    btnModalOk.parentNode.replaceChild(newOk, btnModalOk);
+
+    const newCancel = btnModalCancel.cloneNode(true);
+    btnModalCancel.parentNode.replaceChild(newCancel, btnModalCancel);
+
+    // Re-assign global variables to new elements
+    const currentOk = document.getElementById('btnModalOk');
+    const currentCancel = document.getElementById('btnModalCancel');
+
+    currentOk.onclick = () => {
+        customModal.classList.add('hidden');
+        if (onOk) onOk();
+    };
+
+    currentCancel.onclick = () => {
+        customModal.classList.add('hidden');
+        if (onCancel) onCancel();
+    };
+}
+
+// Admin Context Menu
+function showPlayerActions(player, x, y, inSlot = false) {
+    // Remove existing menu
+    const existing = document.querySelector('.admin-menu');
+    if (existing) existing.remove();
+
+    const menu = document.createElement('div');
+    menu.className = 'admin-menu';
+    menu.style.left = `${x}px`;
+    menu.style.top = `${y}px`;
+
+    const title = document.createElement('div');
+    title.className = 'menu-title';
+    title.innerText = player.name;
+    menu.appendChild(title);
+
+    // Section 1: Movement / Assignment
+    if (inSlot) {
+        // Option: Move to Lobby (Unassign)
+        const btnUnassign = document.createElement('button');
+        btnUnassign.innerText = "Move to Lobby";
+        btnUnassign.onclick = () => {
+            // Find which slot they are in
+            const slot = (currentRoom.slots.white && currentRoom.slots.white.id === player.id) ? 'white' : 'black';
+            socket.emit('remove_from_slot', { roomCode: currentRoom.code, slot: slot });
+            menu.remove();
+        };
+        menu.appendChild(btnUnassign);
+    } else {
+        // Option: Set White
+        const btnWhite = document.createElement('button');
+        btnWhite.innerText = "Set as White";
+        btnWhite.onclick = () => {
+            socket.emit('assign_slot', { roomCode: currentRoom.code, playerId: player.id, slot: 'white' });
+            menu.remove();
+        };
+        menu.appendChild(btnWhite);
+
+        // Option: Set Black
+        const btnBlack = document.createElement('button');
+        btnBlack.innerText = "Set as Black";
+        btnBlack.onclick = () => {
+            socket.emit('assign_slot', { roomCode: currentRoom.code, playerId: player.id, slot: 'black' });
+            menu.remove();
+        };
+        menu.appendChild(btnBlack);
+    }
+
+    // Section 2: Shine Colors
+    const shineSection = document.createElement('div');
+    shineSection.style.borderTop = "1px solid rgba(255,255,255,0.1)";
+    shineSection.style.marginTop = "5px";
+    shineSection.style.paddingTop = "5px";
+
+    const shineLabel = document.createElement('div');
+    shineLabel.innerText = "Set Shine Color:";
+    shineLabel.style.fontSize = "0.8rem";
+    shineLabel.style.color = "#aaa";
+    shineLabel.style.marginBottom = "5px";
+    shineSection.appendChild(shineLabel);
+
+    const colors = [
+        { name: 'Gold', hex: '#ffd700' },
+        { name: 'Red', hex: '#ff4b4b' },
+        { name: 'Blue', hex: '#4488ff' },
+        { name: 'Green', hex: '#81b64c' },
+        { name: 'Purple', hex: '#9b59b6' },
+        { name: 'Cyan', hex: '#00cec9' }
+    ];
+
+    const colorGrid = document.createElement('div');
+    colorGrid.style.display = "grid";
+    colorGrid.style.gridTemplateColumns = "repeat(3, 1fr)";
+    colorGrid.style.gap = "5px";
+
+    colors.forEach(c => {
+        const btn = document.createElement('div');
+        btn.style.backgroundColor = c.hex;
+        btn.style.height = "20px";
+        btn.style.borderRadius = "4px";
+        btn.style.cursor = "pointer";
+        btn.title = c.name;
+        btn.onclick = () => {
+            socket.emit('set_shine_color', { roomCode: currentRoom.code, playerId: player.id, color: c.hex });
+            menu.remove();
+        };
+        colorGrid.appendChild(btn);
+    });
+    shineSection.appendChild(colorGrid);
+
+    // Remove Shine Button
+    if (player.shineColor || player.isShining) {
+        const btnRemove = document.createElement('button');
+        btnRemove.innerText = "Remove Shine";
+        btnRemove.style.width = "100%";
+        btnRemove.style.marginTop = "5px";
+        btnRemove.style.background = "rgba(255, 68, 68, 0.2)";
+        btnRemove.style.color = "#ff4444";
+        btnRemove.onclick = () => {
+            socket.emit('set_shine_color', { roomCode: currentRoom.code, playerId: player.id, color: null });
+            menu.remove();
+        };
+        shineSection.appendChild(btnRemove);
+    }
+    menu.appendChild(shineSection);
+
+    // Section 3: Kick Player (Red)
+    // Don't allow kicking yourself (Admin)
+    if (player.id !== currentRoom.admin) {
+        const btnKick = document.createElement('button');
+        btnKick.innerText = "Kick Player";
+        btnKick.style.marginTop = "8px";
+        btnKick.style.background = "#ff4444";
+        btnKick.style.color = "white";
+        btnKick.style.fontWeight = "bold";
+        btnKick.onclick = () => {
+            showModal(`Are you sure you want to kick ${player.name}?`, () => {
+                socket.emit('kick_player', { roomCode: currentRoom.code, playerId: player.id });
+            }, true);
+            menu.remove();
+        };
+        menu.appendChild(btnKick);
+    }
+
+    document.body.appendChild(menu);
+
+    // Close on click outside
+    setTimeout(() => {
+        document.addEventListener('click', function closeMenu(e) {
+            if (!menu.contains(e.target)) {
+                menu.remove();
+                document.removeEventListener('click', closeMenu);
+            }
+        });
+    }, 0);
+}
+
 const playerListEl = document.getElementById('playerList');
 const slotWhite = document.getElementById('slotWhite');
 const slotBlack = document.getElementById('slotBlack');
@@ -96,10 +275,8 @@ const myTimer = document.getElementById('myTimer');
 const gameRoomCodeDisplay = document.getElementById('gameRoomCodeDisplay');
 
 // Controls Elements
-const btnStart = document.getElementById('btnStart');
 const btnPrev = document.getElementById('btnPrev');
 const btnNext = document.getElementById('btnNext');
-const btnEnd = document.getElementById('btnEnd');
 const actionControls = document.getElementById('actionControls');
 const btnDraw = document.getElementById('btnDraw');
 const btnResign = document.getElementById('btnResign');
@@ -117,10 +294,8 @@ let lastMoveTime = Date.now();
 let currentViewIndex = -1; // -1 means live. 0 to N-1 for history.
 
 // History Listeners
-btnStart.addEventListener('click', () => goToMove(0));
 btnPrev.addEventListener('click', () => goToMove(currentViewIndex - 1));
 btnNext.addEventListener('click', () => goToMove(currentViewIndex + 1));
-btnEnd.addEventListener('click', () => goLive());
 
 // PGN Button Listener
 if (btnPGN) {
@@ -472,25 +647,35 @@ startGameBtn.addEventListener('click', () => {
     }
 });
 
-// Slot Click Handling (Assignment)
-function handleSlotClick(slotColor) {
+// Slot Click Handling (Assignment & Unified Menu)
+function handleSlotClick(slotColor, event) {
     if (!isAdmin) return;
-    if (!selectedPlayerId) {
-        alert("Select a player from the list first!");
-        return;
+
+    // Check if slot is already filled
+    const playerInSlot = currentRoom.slots[slotColor];
+
+    if (playerInSlot) {
+        // Open Unified Admin Menu for this player (inSlot = true)
+        showPlayerActions(playerInSlot, event.pageX, event.pageY, true);
+    } else {
+        // Assign selected player
+        if (!selectedPlayerId) {
+            alert("Select a player from the list first!");
+            return;
+        }
+        socket.emit('assign_slot', {
+            roomCode: currentRoom.code,
+            playerId: selectedPlayerId,
+            slot: slotColor
+        });
+        // Deselect after assign
+        selectedPlayerId = null;
+        renderLobby(currentRoom);
     }
-    socket.emit('assign_slot', {
-        roomCode: currentRoom.code,
-        playerId: selectedPlayerId,
-        slot: slotColor
-    });
-    // Deselect after assign
-    selectedPlayerId = null;
-    renderLobby(currentRoom);
 }
 
-slotWhite.addEventListener('click', () => handleSlotClick('white'));
-slotBlack.addEventListener('click', () => handleSlotClick('black'));
+slotWhite.addEventListener('click', (e) => handleSlotClick('white', e));
+slotBlack.addEventListener('click', (e) => handleSlotClick('black', e));
 
 
 // ============================================
@@ -519,6 +704,31 @@ socket.on('error_message', (msg) => {
         alert(msg);
     }
 });
+
+socket.on('join_error', (msg) => {
+    joinError.innerText = msg;
+});
+
+socket.on('kicked', () => {
+    showModal("You have been kicked from the room.", () => {
+        location.reload();
+    });
+});
+
+socket.on('room_closed', () => {
+    showModal("The Admin has left. The room is closed.", () => {
+        location.reload();
+    });
+});
+
+function resetToMain() {
+    mainMenu.classList.remove('hidden');
+    lobbyScreen.classList.add('hidden');
+    gameScreen.classList.add('hidden');
+    joinError.innerText = "";
+    currentRoom = null;
+    currentViewIndex = 0;
+}
 
 socket.on('update_lobby', (room) => {
     currentRoom = room;
@@ -694,18 +904,29 @@ function renderLobby(room) {
     // Player List
     playerListEl.innerHTML = '';
     room.players.forEach(p => {
+        // FILTER: Don't show if assigned to a slot
+        const isWhite = room.slots.white && room.slots.white.id === p.id;
+        const isBlack = room.slots.black && room.slots.black.id === p.id;
+        if (isWhite || isBlack) return;
+
         const li = document.createElement('li');
         li.innerText = p.name + (p.id === room.admin ? ' (Admin)' : '');
 
-        // Selection Logic for Admin
+        if (p.shineColor) {
+            li.classList.add('shining');
+            li.style.setProperty('--shine-color', p.shineColor);
+        } else if (p.isShining) {
+            // Backwards compatibility or default "Gold" if old toggle used
+            li.classList.add('shining');
+            li.style.setProperty('--shine-color', '#ffd700');
+        }
+
+        // Selection Logic for Admin (Context Menu)
         if (isAdmin) {
             li.style.cursor = 'pointer';
-            if (p.id === selectedPlayerId) {
-                li.style.background = 'rgba(129, 182, 76, 0.4)';
-            }
-            li.addEventListener('click', () => {
-                selectedPlayerId = p.id;
-                renderLobby(currentRoom); // Re-render to show selection
+            li.addEventListener('click', (e) => {
+                e.stopPropagation(); // Prevent bubbling
+                showPlayerActions(p, e.clientX, e.clientY);
             });
         }
         playerListEl.appendChild(li);
