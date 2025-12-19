@@ -17,15 +17,22 @@ function generateRoomCode() {
     return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
+function generateAdminToken() {
+    return Math.random().toString(36).substr(2) + Math.random().toString(36).substr(2);
+}
+
 io.on('connection', (socket) => {
     console.log('A user connected:', socket.id);
 
     // Create Room
     socket.on('create_room', (playerName) => {
         const roomCode = generateRoomCode();
+        const adminToken = generateAdminToken(); // SECURE TOKEN
         rooms[roomCode] = {
             code: roomCode,
             admin: socket.id,
+            adminToken: adminToken, // Store locally
+            disconnectTimeout: null, // Grace period timer
             players: [{ id: socket.id, name: playerName, shineColor: null }],
             slots: {
                 white: null,
@@ -40,13 +47,14 @@ io.on('connection', (socket) => {
         };
 
         socket.join(roomCode);
-        socket.emit('room_created', { roomCode, isAdmin: true });
+        // Send token ONLY to the creator
+        socket.emit('room_created', { roomCode, isAdmin: true, adminToken });
         io.to(roomCode).emit('update_lobby', rooms[roomCode]);
         console.log(`Room ${roomCode} created by ${playerName}`);
     });
 
     // Join Room
-    socket.on('join_room', ({ roomCode, playerName }) => {
+    socket.on('join_room', ({ roomCode, playerName, adminToken }) => {
         const room = rooms[roomCode];
         if (room) {
             // Check if already in room (simple check)
@@ -56,10 +64,28 @@ io.on('connection', (socket) => {
             }
 
             socket.join(roomCode);
-            // If this is the creator re-joining or just joining, check admin
-            const isAdmin = (socket.id === room.admin);
 
-            socket.emit('joined_room', { roomCode, isAdmin });
+            // Check Admin Reconnection
+            let isAdmin = false;
+            // 1. Standard ID check (unlikely if re-connected)
+            if (socket.id === room.admin) {
+                isAdmin = true;
+            }
+            // 2. Token Check (The Fix)
+            else if (adminToken && adminToken === room.adminToken) {
+                console.log(`Admin reconnected to room ${roomCode}`);
+                room.admin = socket.id; // Update Admin ID
+                isAdmin = true;
+
+                // Clear Grace Period Timeout if exists
+                if (room.disconnectTimeout) {
+                    clearTimeout(room.disconnectTimeout);
+                    room.disconnectTimeout = null;
+                    console.log(`Grace period cancelled for room ${roomCode}`);
+                }
+            }
+
+            socket.emit('joined_room', { roomCode, isAdmin, adminToken: (isAdmin ? room.adminToken : null) });
             io.to(roomCode).emit('update_lobby', room);
 
             // Reconnection Logic: If game is active, send full state
@@ -315,12 +341,23 @@ io.on('connection', (socket) => {
         for (const roomCode in rooms) {
             const room = rooms[roomCode];
 
-            // If Admin leaves -> Close Room
+            // If Admin leaves -> START GRACE PERIOD
             if (room.admin === socket.id) {
-                io.to(roomCode).emit('room_closed');
-                delete rooms[roomCode];
-                console.log(`Room ${roomCode} closed (Admin left)`);
-                continue; // Stop processing this room
+                console.log(`Admin disconnected from Room ${roomCode}. Starting 60s grace period.`);
+
+                // Set timeout to close room
+                room.disconnectTimeout = setTimeout(() => {
+                    if (rooms[roomCode] && rooms[roomCode].admin === socket.id) {
+                        io.to(roomCode).emit('room_closed');
+                        delete rooms[roomCode];
+                        console.log(`Room ${roomCode} closed (Admin left - Grace period ended)`);
+                    }
+                }, 60000); // 60 Seconds
+
+                // Do NOT delete room yet.
+                // Do NOT mark game as over yet (unless we want to pause?).
+                // For now, let game continue blindly for 60s.
+                continue;
             }
 
             // Regular player leaves

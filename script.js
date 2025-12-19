@@ -228,6 +228,7 @@ let myColor = null; // 'w' or 'b' or null (spectator)
 let isGameActive = false;
 let hasGameEnded = false; // NEW: Track if game finished to show "View Last Grame"
 let game = new Chess();
+let adminToken = null; // Store locally for reconnection
 
 const pieceSymbols = {
     'k': 'https://upload.wikimedia.org/wikipedia/commons/f/f0/Chess_kdt45.svg',
@@ -620,7 +621,9 @@ backToMenuBtn.addEventListener('click', () => {
 joinRoomBtn.addEventListener('click', () => {
     const code = roomCodeInput.value.trim();
     if (code.length === 6) {
-        socket.emit('join_room', { roomCode: code, playerName: myName });
+        // Try to retrieve token if we have one for this room
+        const storedToken = localStorage.getItem(`adminToken_${code}`);
+        socket.emit('join_room', { roomCode: code, playerName: myName, adminToken: storedToken });
     } else {
         joinError.innerText = "Please enter a valid 6-digit code";
     }
@@ -695,15 +698,35 @@ slotBlack.addEventListener('click', (e) => handleSlotClick('black', e));
 socket.on('connect', () => {
     myId = socket.id;
     console.log('Connected with ID:', myId);
+
+    // Auto-Rejoin if we were already in a room (Network Glitch / Reconnect)
+    if (currentRoom && myName) {
+        console.log("Attempting to auto-rejoin...", currentRoom.code);
+        const storedToken = localStorage.getItem(`adminToken_${currentRoom.code}`);
+        socket.emit('join_room', {
+            roomCode: currentRoom.code,
+            playerName: myName, // Re-send name
+            adminToken: storedToken
+        });
+    }
 });
 
-socket.on('room_created', ({ roomCode, isAdmin: adminStatus }) => {
+socket.on('room_created', ({ roomCode, isAdmin: adminStatus, adminToken: token }) => {
     isAdmin = adminStatus;
+    if (token) {
+        adminToken = token;
+        localStorage.setItem(`adminToken_${roomCode}`, token); // Save for this room
+    }
     showScreen('lobby');
 });
 
-socket.on('joined_room', ({ roomCode, isAdmin: adminStatus }) => {
+socket.on('joined_room', ({ roomCode, isAdmin: adminStatus, adminToken: token }) => {
     isAdmin = adminStatus;
+    // If we joined and got a token (e.g. recognized as admin), ensure it's saved
+    if (token) {
+        adminToken = token;
+        localStorage.setItem(`adminToken_${roomCode}`, token);
+    }
     showScreen('lobby');
 });
 
