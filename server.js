@@ -443,14 +443,25 @@ io.on('connection', (socket) => {
 
             // 1. Handle Admin Disconnect (Room Closure)
             if (room.admin === socket.id) {
-                console.log(`Admin disconnected from Room ${roomCode}. Starting 60s grace period.`);
-                room.disconnectTimeout = setTimeout(() => {
-                    if (rooms[roomCode] && rooms[roomCode].admin === socket.id) {
-                        io.to(roomCode).emit('room_closed');
-                        delete rooms[roomCode];
-                        console.log(`Room ${roomCode} closed (Admin left - Grace period ended)`);
-                    }
-                }, 60000); // 60 Seconds
+                console.log(`Admin disconnected from Room ${roomCode}. CHECKING STATUS...`);
+                // CHANGE: Only close room if NO GAME is active.
+                // If game is active, we should keep room alive for the players to finish.
+                // But if Admin leaves, who controls?
+                // For now, let's keep it alive. Admin can reconnect.
+
+                if (!room.gameStarted) {
+                    console.log(`No active game. Starting 60s grace period for Admin.`);
+                    room.disconnectTimeout = setTimeout(() => {
+                        if (rooms[roomCode] && rooms[roomCode].admin === socket.id && !rooms[roomCode].gameStarted) {
+                            io.to(roomCode).emit('room_closed');
+                            delete rooms[roomCode];
+                            console.log(`Room ${roomCode} closed (Admin left - Grace period ended)`);
+                        }
+                    }, 60000); // 60 Seconds
+                } else {
+                    console.log(`Active Game in progress. Room will NOT close immediately.`);
+                    // We might want to set a flag that Admin is gone, but for now just keep it.
+                }
             }
 
             // 2. Check if this user is an Active Player in a Game
@@ -483,6 +494,10 @@ io.on('connection', (socket) => {
                         });
                         room.gameStarted = false;
 
+                        // Now that game is over, we check if we should close room?
+                        // If Admin is also gone, maybe?
+                        // For now, just reset game.
+
                         // Remove player completely now
                         const idx = room.players.indexOf(player);
                         if (idx !== -1) {
@@ -493,21 +508,17 @@ io.on('connection', (socket) => {
 
                         io.to(roomCode).emit('update_lobby', room);
 
+                        // If room is empty now, close it
+                        if (room.players.length === 0) {
+                            delete rooms[roomCode];
+                            console.log(`Room ${roomCode} deleted (Game ended via abandonment & empty)`);
+                        }
+
                     }, 60000); // 60 Seconds
                 }
-
-                // Do NOT remove them from room/slots yet. Look below.
-                // We typically skip the "Regular player leaves" logic block if we want to hold their spot?
-                // OR adapt the logic below to NOT delete if they have a timeout running.
             }
 
             // 3. Regular Player Logic (Only remove if NOT keeping spot)
-            // If they are admin or active player with timer, we keep them in `players` list for now.
-            // But `disconnect` implies the socket is GONE.
-            // We usually keep the OBJECT in `players` but maybe mark as offline?
-            // Current code finds by ID. If we don't remove, `update_lobby` sends old ID.
-            // Reconnect updates ID. This is fine. AS LONG AS WE DON'T DELETE FROM ARRAY.
-
             const player = room.players.find(p => p.id === socket.id);
             if (player) {
                 // If Admin or Active Player with timeout, DO NOT REMOVE from array yet.
@@ -516,6 +527,7 @@ io.on('connection', (socket) => {
 
                 if (!isProtected) {
                     // Ordinary spectator or lobby player -> Bye
+                    console.log(`Spectator/Old ID ${player.name} left.`);
                     const index = room.players.indexOf(player);
                     if (index !== -1) {
                         room.players.splice(index, 1);
@@ -524,18 +536,19 @@ io.on('connection', (socket) => {
                         if (room.slots.black === player) room.slots.black = null;
 
                         if (room.players.length === 0) {
-                            delete rooms[roomCode];
+                            // ONLY delete if NO game started (Double check)
+                            if (!room.gameStarted) {
+                                delete rooms[roomCode];
+                                console.log(`Room ${roomCode} deleted (Last player left)`);
+                            } else {
+                                console.log(`Room ${roomCode} retained causing pending game timeouts.`);
+                            }
                         } else {
                             io.to(roomCode).emit('update_lobby', room);
                         }
                     }
                 } else {
-                    // Protected: Just mark as offline? Or do nothing?
-                    // We need to update lobby so others see they are gone?
-                    // Maybe add an "offline" flag? 
-                    // For now, simplicity: Don't remove. They appear in lobby but message says they left?
-                    // Actually, if we don't remove, they stay in the list.
-                    // The client might see them. That's good for "reconnecting...".
+                    console.log(`Protected player ${player.name} disconnected. Kept in room.`);
                 }
             }
         }
