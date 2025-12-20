@@ -97,8 +97,19 @@ io.on('connection', (socket) => {
         console.log(`Room ${roomCode} created by ${playerName}`);
     });
 
+    // Helper: Safe Handler Wrapper (Prevents Crashes)
+    const safeHandler = (handler) => {
+        return (...args) => {
+            try {
+                handler(...args);
+            } catch (err) {
+                console.error("CRITICAL SERVER ERROR (Caught):", err);
+            }
+        };
+    };
+
     // Join Room
-    socket.on('join_room', ({ roomCode, playerName, adminToken, playerToken }) => {
+    socket.on('join_room', safeHandler(({ roomCode, playerName, adminToken, playerToken }) => {
         const room = rooms[roomCode];
         if (room) {
             let player = null;
@@ -225,10 +236,10 @@ io.on('connection', (socket) => {
         } else {
             socket.emit('error_message', 'Invalid Room Code');
         }
-    });
+    }));
 
     // Assign Slot (Admin Only)
-    socket.on('assign_slot', ({ roomCode, playerId, slot }) => {
+    socket.on('assign_slot', safeHandler(({ roomCode, playerId, slot }) => {
         const room = rooms[roomCode];
         if (room && room.admin === socket.id) {
             // Remove player from other slots if present
@@ -242,10 +253,10 @@ io.on('connection', (socket) => {
                 io.to(roomCode).emit('update_lobby', room);
             }
         }
-    });
+    }));
 
     // Set Shine Color (Admin Only)
-    socket.on('set_shine_color', ({ roomCode, playerId, color }) => {
+    socket.on('set_shine_color', safeHandler(({ roomCode, playerId, color }) => {
         const room = rooms[roomCode];
         if (room && room.admin === socket.id) {
             const player = room.players.find(p => p.id === playerId);
@@ -254,10 +265,10 @@ io.on('connection', (socket) => {
                 io.to(roomCode).emit('update_lobby', room);
             }
         }
-    });
+    }));
 
     // Start Game (Admin Only)
-    socket.on('start_game', (roomCode) => {
+    socket.on('start_game', safeHandler((roomCode) => {
         const room = rooms[roomCode];
         if (room && room.admin === socket.id) {
             if (room.slots.white && room.slots.black) {
@@ -277,10 +288,10 @@ io.on('connection', (socket) => {
                 socket.emit('error_message', 'Both slots must be filled to start.');
             }
         }
-    });
+    }));
 
     // Remove from Slot (Admin Only)
-    socket.on('remove_from_slot', ({ roomCode, slot }) => {
+    socket.on('remove_from_slot', safeHandler(({ roomCode, slot }) => {
         const room = rooms[roomCode];
         if (room && room.admin === socket.id) {
             if (room.slots[slot]) {
@@ -301,10 +312,10 @@ io.on('connection', (socket) => {
                 io.to(roomCode).emit('update_lobby', room);
             }
         }
-    });
+    }));
 
     // Kick Player (Admin Only)
-    socket.on('kick_player', ({ roomCode, playerId }) => {
+    socket.on('kick_player', safeHandler(({ roomCode, playerId }) => {
         const room = rooms[roomCode];
         if (room && room.admin === socket.id) {
 
@@ -348,10 +359,10 @@ io.on('connection', (socket) => {
                 io.to(roomCode).emit('update_lobby', room);
             }
         }
-    });
+    }));
 
     // Resign
-    socket.on('resign', (roomCode) => {
+    socket.on('resign', safeHandler((roomCode) => {
         const room = rooms[roomCode];
         if (room && room.gameStarted) {
             const resigningPlayer = room.players.find(p => p.id === socket.id);
@@ -376,10 +387,10 @@ io.on('connection', (socket) => {
             room.gameStarted = false;
             io.to(roomCode).emit('update_lobby', room);
         }
-    });
+    }));
 
     // Make Move
-    socket.on('make_move', ({ roomCode, move, fen }) => {
+    socket.on('make_move', safeHandler(({ roomCode, move, fen }) => {
         const room = rooms[roomCode];
         if (room && room.gameStarted) {
             // SAFETY: Check slots
@@ -431,10 +442,10 @@ io.on('connection', (socket) => {
             // Broadcast to ALL (including sender) to ensure Time Sync is perfect
             io.to(roomCode).emit('move_made', { move, fen, whiteTime: room.whiteTime, blackTime: room.blackTime });
         }
-    });
+    }));
 
     // Draw Offer
-    socket.on('offer_draw', (roomCode) => {
+    socket.on('offer_draw', safeHandler((roomCode) => {
         const room = rooms[roomCode];
         if (room && room.gameStarted) {
             // Send to opponent
@@ -442,10 +453,10 @@ io.on('connection', (socket) => {
                 roomCode
             });
         }
-    });
+    }));
 
     // Client claims Game Over (Checkmate/Draw detected locally)
-    socket.on('claim_game_over', ({ roomCode, reason, winner, fen, lastMove }) => {
+    socket.on('claim_game_over', safeHandler(({ roomCode, reason, winner, fen, lastMove }) => {
         const room = rooms[roomCode];
         if (room && room.gameStarted) {
             io.to(roomCode).emit('game_over', {
@@ -458,9 +469,9 @@ io.on('connection', (socket) => {
             room.gameStarted = false;
             io.to(roomCode).emit('update_lobby', room); // SYNC FIX
         }
-    });
+    }));
 
-    socket.on('accept_draw', (roomCode) => {
+    socket.on('accept_draw', safeHandler((roomCode) => {
         const room = rooms[roomCode];
         if (room && room.gameStarted) {
             io.to(roomCode).emit('game_over', {
@@ -471,18 +482,18 @@ io.on('connection', (socket) => {
             room.gameStarted = false;
             io.to(roomCode).emit('update_lobby', room); // SYNC FIX
         }
-    });
+    }));
 
-    socket.on('reject_draw', (roomCode) => {
+    socket.on('reject_draw', safeHandler((roomCode) => {
         const room = rooms[roomCode];
         // Broadcast generic message to everyone.
         // Client side will handle "Your offer" vs "Draw offer" differentiation if possible, 
         // or we just show a neutral "Draw offer rejected" to everyone.
         io.to(roomCode).emit('draw_rejected');
-    });
+    }));
 
     // Chat
-    socket.on('send_chat', ({ roomCode, message }) => {
+    socket.on('send_chat', safeHandler(({ roomCode, message }) => {
         const room = rooms[roomCode];
         if (room) {
             const player = room.players.find(p => p.id === socket.id);
@@ -495,9 +506,9 @@ io.on('connection', (socket) => {
                 });
             }
         }
-    });
+    }));
 
-    socket.on('disconnect', () => {
+    socket.on('disconnect', safeHandler(() => {
         console.log(`User disconnected: ${socket.id}`);
         // Remove player from all rooms they are in
         for (const roomCode in rooms) {
@@ -614,7 +625,7 @@ io.on('connection', (socket) => {
                 }
             }
         }
-    });
+    }));
 
 });
 
