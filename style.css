@@ -4,6 +4,8 @@
     --board-white: #eeeed2;
     --board-black: #769656;
     --highlight-move: rgba(255, 255, 0, 0.5);
+    --highlight-last-move: rgba(255, 255, 50, 0.5);
+    /* Yellow highlight for last move */
     --highlight-selected: rgba(186, 202, 68, 0.8);
     --primary-color: #81b64c;
     --secondary-color: #454341;
@@ -435,6 +437,16 @@ input:focus {
 
 .square.selected {
     background-color: var(--highlight-selected) !important;
+}
+
+.square.white.highlight-last-move {
+    background-color: #f7f769 !important;
+    /* Light Yellow */
+}
+
+.square.black.highlight-last-move {
+    background-color: #baca2b !important;
+    /* Dark Yellow-Green */
 }
 
 .square.valid-move::after {

@@ -15,10 +15,31 @@ app.use(express.static(path.join(__dirname, '.')));
 
 let rooms = {};
 
+// Helper to strip non-serializable objects (Timers) for Saving/Sending
+function safeRoom(room) {
+    if (!room) return null;
+    const cleanRoom = { ...room };
+    // Remove Timeout Objects
+    if (cleanRoom.disconnectTimeout) cleanRoom.disconnectTimeout = null;
+
+    // Clean Players
+    cleanRoom.players = room.players.map(p => {
+        const cleanP = { ...p };
+        if (cleanP.disconnectGameTimeout) cleanP.disconnectGameTimeout = null;
+        return cleanP;
+    });
+
+    return cleanRoom;
+}
+
 // Persistence Helpers
 function saveRooms() {
     try {
-        fs.writeFileSync(ROOMS_FILE, JSON.stringify(rooms, null, 2));
+        const cleanRooms = {};
+        for (const key in rooms) {
+            cleanRooms[key] = safeRoom(rooms[key]);
+        }
+        fs.writeFileSync(ROOMS_FILE, JSON.stringify(cleanRooms, null, 2));
     } catch (err) {
         console.error("Failed to save rooms:", err);
     }
@@ -74,7 +95,7 @@ setInterval(() => {
                 if (currentWhiteTime <= 0) room.whiteTime = 0;
                 if (currentBlackTime <= 0) room.blackTime = 0;
 
-                io.to(roomCode).emit('update_lobby', room);
+                io.to(roomCode).emit('update_lobby', safeRoom(room));
                 saveRooms(); // Save on Timeout
             }
         }
@@ -122,7 +143,7 @@ io.on('connection', (socket) => {
         socket.join(roomCode);
         // Send token ONLY to the creator (Admin uses same token for Player ID)
         socket.emit('room_created', { roomCode, isAdmin: true, adminToken, playerToken: adminToken });
-        io.to(roomCode).emit('update_lobby', rooms[roomCode]);
+        io.to(roomCode).emit('update_lobby', safeRoom(rooms[roomCode]));
         console.log(`Room ${roomCode} created by ${playerName}`);
         saveRooms(); // Save on Create
     });
@@ -221,7 +242,7 @@ io.on('connection', (socket) => {
                 playerToken: player['token']
             });
 
-            io.to(roomCode).emit('update_lobby', room);
+            io.to(roomCode).emit('update_lobby', safeRoom(room));
 
             // Reconnection Logic: If game is active, send full state
             if (room.gameStarted) {
@@ -283,7 +304,7 @@ io.on('connection', (socket) => {
             const player = room.players.find(p => p.id === playerId);
             if (player) {
                 room.slots[slot] = player;
-                io.to(roomCode).emit('update_lobby', room);
+                io.to(roomCode).emit('update_lobby', safeRoom(room));
                 saveRooms();
             }
         }
@@ -296,7 +317,7 @@ io.on('connection', (socket) => {
             const player = room.players.find(p => p.id === playerId);
             if (player) {
                 player.shineColor = color || null;
-                io.to(roomCode).emit('update_lobby', room);
+                io.to(roomCode).emit('update_lobby', safeRoom(room));
                 saveRooms();
             }
         }
@@ -364,7 +385,7 @@ io.on('connection', (socket) => {
                     room.gameStarted = false;
                 }
 
-                io.to(roomCode).emit('update_lobby', room);
+                io.to(roomCode).emit('update_lobby', safeRoom(room));
                 saveRooms();
             }
         }
@@ -412,7 +433,7 @@ io.on('connection', (socket) => {
                 }
 
                 // Update room for others
-                io.to(roomCode).emit('update_lobby', room);
+                io.to(roomCode).emit('update_lobby', safeRoom(room));
                 saveRooms();
             }
         }
@@ -430,7 +451,7 @@ io.on('connection', (socket) => {
             if (!room.slots.white || !room.slots.black) {
                 // Corruption check: Game started but slots empty?
                 room.gameStarted = false;
-                io.to(roomCode).emit('update_lobby', room);
+                io.to(roomCode).emit('update_lobby', safeRoom(room));
                 return;
             }
 
@@ -442,7 +463,7 @@ io.on('connection', (socket) => {
                 message: `${resigningPlayer.name} resigned. ${winnerColor} wins!`
             });
             room.gameStarted = false;
-            io.to(roomCode).emit('update_lobby', room);
+            io.to(roomCode).emit('update_lobby', safeRoom(room));
             saveRooms(); // Save on Resign
         }
     }));
@@ -455,7 +476,7 @@ io.on('connection', (socket) => {
             if (!room.slots.white || !room.slots.black) {
                 console.error("Game active but slots missing! Aborting game.");
                 room.gameStarted = false;
-                io.to(roomCode).emit('update_lobby', room);
+                io.to(roomCode).emit('update_lobby', safeRoom(room));
                 return;
             }
 
@@ -488,7 +509,7 @@ io.on('connection', (socket) => {
                     message: `Time's up! ${winner} Wins!`
                 });
                 room.gameStarted = false;
-                io.to(roomCode).emit('update_lobby', room); // SYNC FIX
+                io.to(roomCode).emit('update_lobby', safeRoom(room)); // SYNC FIX
                 saveRooms(); // Save on Timeout (Move Check)
                 return;
             }
@@ -528,7 +549,7 @@ io.on('connection', (socket) => {
                 lastMove: lastMove // Pass last move to preserve history if possible
             });
             room.gameStarted = false;
-            io.to(roomCode).emit('update_lobby', room); // SYNC FIX
+            io.to(roomCode).emit('update_lobby', safeRoom(room)); // SYNC FIX
         }
     }));
 
@@ -541,7 +562,7 @@ io.on('connection', (socket) => {
                 message: 'Game ended in a Draw (Mutual Agreement)'
             });
             room.gameStarted = false;
-            io.to(roomCode).emit('update_lobby', room); // SYNC FIX
+            io.to(roomCode).emit('update_lobby', safeRoom(room)); // SYNC FIX
             saveRooms();
         }
     }));
@@ -642,7 +663,7 @@ io.on('connection', (socket) => {
                             if (room.slots.black === player) room.slots.black = null;
                         }
 
-                        io.to(roomCode).emit('update_lobby', room);
+                        io.to(roomCode).emit('update_lobby', safeRoom(room));
                         saveRooms(); // Save on Abandonment Update
 
 
@@ -684,7 +705,7 @@ io.on('connection', (socket) => {
                                 console.log(`Room ${roomCode} retained causing pending game timeouts.`);
                             }
                         } else {
-                            io.to(roomCode).emit('update_lobby', room);
+                            io.to(roomCode).emit('update_lobby', safeRoom(room));
                             saveRooms(); // Save on Player Left
                         }
                     }

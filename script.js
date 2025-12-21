@@ -454,7 +454,20 @@ btnResign.addEventListener('click', () => {
     };
 });
 
+let lastDrawOfferTime = 0;
+
 btnDraw.addEventListener('click', () => {
+    const now = Date.now();
+    const cooldown = 15000; // 15 Seconds
+    const elapsed = now - lastDrawOfferTime;
+
+    if (elapsed < cooldown) {
+        const remaining = Math.ceil((cooldown - elapsed) / 1000);
+        showToast(`Wait ${remaining}s to offer draw again.`);
+        return;
+    }
+
+    lastDrawOfferTime = now;
     socket.emit('offer_draw', currentRoom.code);
     showToast("Offer sent", 2000);
 });
@@ -481,20 +494,25 @@ socket.on('draw_offered', () => {
             <h2>Finish the game?</h2>
             <p style="margin: 15px 0 20px;">Opponent wants to draw.</p>
             <div style="display: flex; gap: 10px; justify-content: center;">
-                <button id="btnRejectDraw" class="glow-btn outline" style="border-color: #ff6b6b; color: #ff6b6b;">Reject</button>
-                <button id="btnAcceptDraw" class="glow-btn">Accept</button>
+                <button class="glow-btn outline btn-reject" style="border-color: #ff6b6b; color: #ff6b6b;">Reject</button>
+                <button class="glow-btn btn-accept">Accept</button>
             </div>
         </div>
     `;
     document.body.appendChild(modal);
 
-    document.getElementById('btnRejectDraw').onclick = () => {
-        socket.emit('reject_draw', currentRoom.code);
+    // Use scoped selectors to avoid ID conflicts
+    modal.querySelector('.btn-reject').onclick = () => {
+        if (currentRoom && currentRoom.code) {
+            socket.emit('reject_draw', currentRoom.code);
+        }
         modal.remove();
     };
 
-    document.getElementById('btnAcceptDraw').onclick = () => {
-        socket.emit('accept_draw', currentRoom.code);
+    modal.querySelector('.btn-accept').onclick = () => {
+        if (currentRoom && currentRoom.code) {
+            socket.emit('accept_draw', currentRoom.code);
+        }
         modal.remove();
     };
 });
@@ -1467,6 +1485,24 @@ function renderBoard() {
         boardElement.classList.remove('history-mode');
     }
 
+    // Determine Last Move for Highlighting
+    let lastMove = null;
+    const history = game.history({ verbose: true });
+
+    if (isHistoryMode) {
+        // In history mode, show move leading to current state
+        // currentViewIndex is the number of moves shown.
+        // So the last move made was at index currentViewIndex - 1
+        if (currentViewIndex > 0 && history[currentViewIndex - 1]) {
+            lastMove = history[currentViewIndex - 1];
+        }
+    } else {
+        // Live mode: Show latest move
+        if (history.length > 0) {
+            lastMove = history[history.length - 1];
+        }
+    }
+
     // Orientation
     let isFlipped = (myColor === 'b');
 
@@ -1483,6 +1519,11 @@ function renderBoard() {
 
             const squareId = String.fromCharCode('a'.charCodeAt(0) + col) + (8 - row);
             square.dataset.square = squareId;
+
+            // Highlight Last Move
+            if (lastMove && (squareId === lastMove.from || squareId === lastMove.to)) {
+                square.classList.add('highlight-last-move');
+            }
 
             // Coordinates Logic
             if (c === 0) {
