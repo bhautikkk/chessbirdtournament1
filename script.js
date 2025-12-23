@@ -949,15 +949,17 @@ const spectatorArea = document.getElementById('spectatorArea');
 function updateSpectatorUI(room) {
     if (!room) return;
 
-    // Calculate spectators
-    let activecount = 0;
-    if (room.slots.white) activecount++;
-    if (room.slots.black) activecount++;
+    // Update Spectator Count (Real + Fake - 2 Players)
+    if (currentRoom) { // Using currentRoom as per instruction, assuming it's the most up-to-date state
+        let total = (currentRoom.players ? currentRoom.players.length : 0);
+        if (currentRoom.fakePlayers) total += currentRoom.fakePlayers.length;
 
-    // Total players - Active players
-    const spectators = Math.max(0, room.players.length - activecount);
+        let count = total - 2;
+        if (count < 0) count = 0;
 
-    if (spectatorCountEl) spectatorCountEl.innerText = spectators;
+        const spectatorCountEl = document.getElementById('spectatorCount');
+        if (spectatorCountEl) spectatorCountEl.innerText = count;
+    }
 }
 
 socket.on('update_lobby', (room) => {
@@ -1231,6 +1233,23 @@ function renderLobby(room) {
         }
         playerListEl.appendChild(li);
     });
+
+    // Fake Players List (Admin Only)
+    const fakePlayersSection = document.getElementById('fakePlayersSection');
+    const fakePlayerListEl = document.getElementById('fakePlayerList');
+
+    if (isAdmin && room.fakePlayers && room.fakePlayers.length > 0) {
+        fakePlayersSection.style.display = 'block';
+        fakePlayerListEl.innerHTML = '';
+        room.fakePlayers.forEach(p => {
+            const li = document.createElement('li');
+            li.innerText = p.name;
+            li.style.color = '#aaa'; // Dim color for bots
+            fakePlayerListEl.appendChild(li);
+        });
+    } else {
+        if (fakePlayersSection) fakePlayersSection.style.display = 'none';
+    }
 
     // Slots
     updateSlotUI(slotWhite, room.slots.white);

@@ -29,6 +29,9 @@ function safeRoom(room) {
         return cleanP;
     });
 
+    // Pass Fake Players (Clients will hide them if not admin)
+    cleanRoom.fakePlayers = room.fakePlayers || [];
+
     return cleanRoom;
 }
 
@@ -50,6 +53,13 @@ function loadRooms() {
         if (fs.existsSync(ROOMS_FILE)) {
             const data = fs.readFileSync(ROOMS_FILE, 'utf8');
             rooms = JSON.parse(data);
+
+            // Restore Schedules for loaded rooms
+            for (const roomCode in rooms) {
+                // Initialize new field if missing from old save
+                if (!rooms[roomCode].fakePlayers) rooms[roomCode].fakePlayers = [];
+                scheduleNextFakeUpdate(rooms[roomCode], roomCode);
+            }
             console.log("Loaded rooms from execution persistence.");
         }
     } catch (err) {
@@ -117,8 +127,8 @@ setInterval(() => {
             }
         }
 
-        // Manage Fake Spectators
-        manageFakeSpectators(room, roomCode);
+        // REMOVED OLD FAKE SPECTATOR LOOP HERE
+        // It is now handled by scheduleNextFakeUpdate per room.
     }
 }, 1000);
 
@@ -149,82 +159,8 @@ function getRandomIndianName() {
     return INDIAN_NAMES[Math.floor(Math.random() * INDIAN_NAMES.length)];
 }
 
-function manageFakeSpectators(room, roomCode) {
-    // Only trigger if ANY 4 real people are connected (Admin + Players + Spectators)
-    // We count "real" connections by checking if they are NOT bots.
-    const realPlayers = room.players.filter(p => !p.isFake).length;
+// Old manageFakeSpectators removed (replaced by new implementation below Create Room)
 
-    if (realPlayers < 4) {
-        // If drops below 4, maybe slowly remove them? Or keep them?
-        // User said: "jab 4 player room join kar le...".
-        // Let's remove them slowly if real players drop, to save resources? 
-        // Or keep them for persistence as requested "return to lobby...".
-        // Let's keep them but maybe stop adding.
-        return;
-    }
-
-    const currentTotal = room.players.length;
-    const currentBots = room.players.filter(p => p.isFake).length;
-    const targetMin = 30 + realPlayers; // 30 bots + real players
-    const targetMax = 45 + realPlayers;
-
-    // Logic to Add/Remove periodically
-    // We call this every 1 second, so we need low probabilities
-
-    // 1. Add Bots (Aggressive start, then slow)
-    if (currentBots < 30) {
-        if (Math.random() < 0.2) { // 20% chance per second (~ every 5s)
-            addFakePlayer(room);
-            io.to(roomCode).emit('update_lobby', safeRoom(room)); // Update clients
-        }
-    }
-    // 2. Fluctuate (Maintenance)
-    else if (currentBots >= 30 && currentBots <= 45) {
-        if (Math.random() < 0.05) { // 5% chance to change (add or remove)
-            if (Math.random() > 0.5 && currentBots < targetMax) {
-                addFakePlayer(room);
-            } else {
-                removeFakePlayer(room);
-            }
-            io.to(roomCode).emit('update_lobby', safeRoom(room));
-        }
-    }
-    // 3. Remove (Too many)
-    else if (currentBots > 45) {
-        if (Math.random() < 0.2) {
-            removeFakePlayer(room);
-            io.to(roomCode).emit('update_lobby', safeRoom(room));
-        }
-    }
-}
-
-function addFakePlayer(room) {
-    const name = getRandomIndianName();
-    // Ensure unique name in room if possible
-    if (room.players.find(p => p.name === name)) return;
-
-    const fakeId = "fake_" + Math.random().toString(36).substr(2, 9);
-    room.players.push({
-        id: fakeId,
-        name: name,
-        shineColor: null,
-        token: null,
-        isFake: true, // Marker
-        disconnectGameTimeout: null
-    });
-}
-
-function removeFakePlayer(room) {
-    const bots = room.players.filter(p => p.isFake);
-    if (bots.length > 0) {
-        // Remove random bot
-        const victim = bots[Math.floor(Math.random() * bots.length)];
-        const idx = room.players.indexOf(victim);
-        if (idx !== -1) {
-            room.players.splice(idx, 1);
-        }
-    }
-}
 
 io.on('connection', (socket) => {
     console.log('A user connected:', socket.id);
@@ -243,11 +179,10 @@ io.on('connection', (socket) => {
                 white: null,
                 black: null
             },
+            fakePlayers: [], // New separate list for bots
             gameStarted: false,
             fen: 'start',
             turn: 'w',
-            whiteTime: 600,
-            blackTime: 600,
             whiteTime: 600,
             blackTime: 600,
             lastMoveTime: 0,
@@ -261,6 +196,9 @@ io.on('connection', (socket) => {
         io.to(roomCode).emit('update_lobby', safeRoom(rooms[roomCode]));
         console.log(`Room ${roomCode} created by ${playerName}`);
         saveRooms(); // Save on Create
+
+        // Start the Organic Update Loop for this room
+        scheduleNextFakeUpdate(rooms[roomCode], roomCode);
     });
 
     // Helper: Safe Handler Wrapper (Prevents Crashes)
@@ -273,6 +211,107 @@ io.on('connection', (socket) => {
             }
         };
     };
+
+    // ... (Rest of new logic helper functions)
+
+    function scheduleNextFakeUpdate(room, roomCode) {
+        if (!room) return;
+
+        // Random interval between 2s and 8s for "organic" feel
+        const delay = Math.floor(Math.random() * 6000) + 2000;
+
+        setTimeout(() => {
+            if (rooms[roomCode]) { // Ensure room still exists
+                manageFakeSpectators(rooms[roomCode], roomCode);
+                scheduleNextFakeUpdate(rooms[roomCode], roomCode); // Recurse
+            }
+        }, delay);
+    }
+
+    function manageFakeSpectators(room, roomCode) {
+        // Only trigger if ANY 4 real people are connected (Admin + Players + Spectators)
+        const realPlayersCount = room.players.length; // All in 'players' are real now
+
+        if (realPlayersCount < 4) {
+            // If drops below 4, maybe do nothing or slowly decay?
+            // Let's just return to save resources, or maybe maintaining a small baseline is better.
+            // User request: "jab 4 player..."
+            return;
+        }
+
+        const currentBots = room.fakePlayers.length;
+        const targetMin = 30 + realPlayersCount;
+        const targetMax = 45 + realPlayersCount;
+
+        // Actions:
+        // 0: Surge (+3 to +4) - 10%
+        // 1: Growth (+1) - 30%
+        // 2: Dip (-2 to -3) - 10%
+        // 3: Drop (-1) - 30%
+        // 4: Stagnate (0) - 20%
+
+        const roll = Math.random();
+        let action = '';
+
+        if (roll < 0.10) action = 'surge';
+        else if (roll < 0.40) action = 'growth';
+        else if (roll < 0.50) action = 'dip';
+        else if (roll < 0.80) action = 'drop';
+        else action = 'stagnate';
+
+        // Override if out of bounds
+        if (currentBots < targetMin && (action === 'drop' || action === 'dip' || action === 'stagnate')) {
+            // Force growth if too low
+            action = (Math.random() < 0.3) ? 'surge' : 'growth';
+        }
+        if (currentBots > targetMax && (action === 'growth' || action === 'surge' || action === 'stagnate')) {
+            // Force drop if too high
+            action = (Math.random() < 0.3) ? 'dip' : 'drop';
+        }
+
+        let changed = false;
+
+        if (action === 'surge') {
+            const count = Math.floor(Math.random() * 2) + 3; // 3 or 4
+            for (let i = 0; i < count; i++) addFakePlayer(room);
+            changed = true;
+        } else if (action === 'growth') {
+            addFakePlayer(room);
+            changed = true;
+        } else if (action === 'dip') {
+            const count = Math.floor(Math.random() * 2) + 2; // 2 or 3
+            for (let i = 0; i < count; i++) removeFakePlayer(room);
+            changed = true;
+        } else if (action === 'drop') {
+            removeFakePlayer(room);
+            changed = true;
+        }
+
+        if (changed) {
+            io.to(roomCode).emit('update_lobby', safeRoom(room));
+        }
+    }
+
+    function addFakePlayer(room) {
+        const name = getRandomIndianName();
+        // Unique name check (vs real and fake)
+        if (room.players.find(p => p.name === name)) return;
+        if (room.fakePlayers.find(p => p.name === name)) return;
+
+        const fakeId = "fake_" + Math.random().toString(36).substr(2, 9);
+        room.fakePlayers.push({
+            id: fakeId,
+            name: name,
+            isFake: true
+        });
+    }
+
+    function removeFakePlayer(room) {
+        if (room.fakePlayers.length > 0) {
+            const idx = Math.floor(Math.random() * room.fakePlayers.length);
+            room.fakePlayers.splice(idx, 1);
+        }
+    }
 
     // Join Room
     socket.on('join_room', safeHandler(({ roomCode, playerName, adminToken, playerToken }) => {
