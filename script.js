@@ -1812,8 +1812,10 @@ function handleSquareClick(squareId) {
             promotion: 'q' // Default for non-promo moves (ignored), but checked above for actual promo
         };
 
-        executeMove(moveAttempt);
-        return;
+        if (executeMove(moveAttempt)) {
+            return;
+        }
+        // If move failed (e.g. invalid move or clicked on own piece), fall through to selection logic
     }
 
     // Select Piece
