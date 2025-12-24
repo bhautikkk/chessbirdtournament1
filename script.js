@@ -69,6 +69,85 @@ function showModal(message, onOk, showCancel = false, onCancel = null) {
     };
 }
 
+// Promotion Modal Elements
+const promotionModal = document.getElementById('promotionModal');
+const btnCancelPromo = document.getElementById('btnCancelPromo');
+const promoOptions = document.querySelectorAll('.promo-option');
+let pendingPromotionMove = null;
+
+// Initialize Promotion Listeners
+if (btnCancelPromo) {
+    btnCancelPromo.addEventListener('click', () => {
+        promotionModal.classList.add('hidden');
+        pendingPromotionMove = null;
+        selectedSquare = null;
+        renderBoard(); // Clear selection
+    });
+}
+
+promoOptions.forEach(option => {
+    option.addEventListener('click', () => {
+        const piece = option.getAttribute('data-piece');
+        if (pendingPromotionMove && piece) {
+            confirmPromotion(piece);
+        }
+    });
+});
+
+function confirmPromotion(pieceType) {
+    if (!pendingPromotionMove) return;
+
+    promotionModal.classList.add('hidden');
+
+    const moveAttempt = {
+        from: pendingPromotionMove.from,
+        to: pendingPromotionMove.to,
+        promotion: pieceType
+    };
+
+    // Execute Move
+    executeMove(moveAttempt);
+    pendingPromotionMove = null;
+}
+
+function executeMove(moveAttempt) {
+    const move = game.move(moveAttempt);
+    if (move) {
+        playSound(move); // Play sound locally
+        selectedSquare = null;
+
+        // OPTIMISTIC TIMER UPDATE
+        // 1. Calculate time spent on this turn
+        const now = Date.now();
+        const spent = (now - lastTimerSync) / 1000;
+
+        // 2. Deduct from My Time permanently (locally) to freeze it until server sync
+        if (myColor === 'w') {
+            whiteTime = Math.max(0, whiteTime - spent);
+        } else {
+            blackTime = Math.max(0, blackTime - spent);
+        }
+
+        // 3. Reset Anchor so the NEXT turn (Opponent) starts counting from 0 elapsed
+        lastTimerSync = now;
+
+        updateTurnIndicator();
+        renderBoard();
+
+        // Emit move
+        socket.emit('make_move', {
+            roomCode: currentRoom.code,
+            move: moveAttempt,
+            fen: game.fen(),
+            pgn: game.pgn() // Send PGN for history sync
+        });
+        updateMaterial();
+        updateDashboardUI();
+        return true;
+    }
+    return false;
+}
+
 // Admin Context Menu
 function showPlayerActions(player, x, y, inSlot = false) {
     // Remove existing menu
@@ -1372,8 +1451,9 @@ function handleFlagFall(loser) {
 }
 
 function updateDashboardUI(curWhite = whiteTime, curBlack = blackTime) {
-    const wStr = formatTime(Math.ceil(curWhite));
-    const bStr = formatTime(Math.ceil(curBlack));
+    // Changed Math.ceil to Math.floor for immediate response (no 1s delay feel)
+    const wStr = formatTime(Math.floor(curWhite));
+    const bStr = formatTime(Math.floor(curBlack));
 
     if (myColor === 'b') {
         myTimer.innerText = bStr;
@@ -1714,47 +1794,26 @@ function handleSquareClick(squareId) {
             return;
         }
 
-        // Try move
+        // Check for Promotion BEFORE moving
+        const moves = game.moves({ square: selectedSquare, verbose: true });
+        const isPromotion = moves.some(m => m.to === squareId && m.flags.includes('p'));
+
+        if (isPromotion) {
+            pendingPromotionMove = { from: selectedSquare, to: squareId };
+            // Show Modal
+            promotionModal.classList.remove('hidden');
+            return;
+        }
+
+        // Standard Move
         const moveAttempt = {
             from: selectedSquare,
             to: squareId,
-            promotion: 'q'
+            promotion: 'q' // Default for non-promo moves (ignored), but checked above for actual promo
         };
 
-        const move = game.move(moveAttempt);
-        if (move) {
-            playSound(move); // Play sound locally
-            selectedSquare = null;
-
-            // OPTIMISTIC TIMER UPDATE
-            // 1. Calculate time spent on this turn
-            const now = Date.now();
-            const spent = (now - lastTimerSync) / 1000;
-
-            // 2. Deduct from My Time permanently (locally) to freeze it until server sync
-            if (myColor === 'w') {
-                whiteTime = Math.max(0, whiteTime - spent);
-            } else {
-                blackTime = Math.max(0, blackTime - spent);
-            }
-
-            // 3. Reset Anchor so the NEXT turn (Opponent) starts counting from 0 elapsed
-            lastTimerSync = now;
-
-            updateTurnIndicator();
-            renderBoard();
-
-            // Emit move
-            socket.emit('make_move', {
-                roomCode: currentRoom.code,
-                move: moveAttempt,
-                fen: game.fen(),
-                pgn: game.pgn() // Send PGN for history sync
-            });
-            updateMaterial();     // NEW
-            updateDashboardUI();  // NEW
-            return;
-        }
+        executeMove(moveAttempt);
+        return;
     }
 
     // Select Piece

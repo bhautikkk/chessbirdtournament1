@@ -1347,3 +1347,35 @@ input,
 }
 
      
+/* Promotion Modal Styles */
+.promotion-options {
+    display: flex;
+    gap: 10px;
+}
+
+.promo-option {
+    width: 60px;
+    height: 60px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: 2px solid transparent;
+}
+
+.promo-option:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: translateY(-3px);
+    border-color: var(--primary-color);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+}
+
+.promo-img {
+    width: 80%;
+    height: 80%;
+    pointer-events: none;
+}
+

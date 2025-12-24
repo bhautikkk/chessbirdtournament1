@@ -226,6 +226,29 @@
         </div>
     </div>
 
+    <!-- Promotion Modal -->
+    <div id="promotionModal" class="modal-overlay hidden" style="z-index: 300;">
+        <div class="glass-card" style="min-width: 200px; padding: 20px;">
+            <h2 style="margin-bottom: 15px; font-size: 1.5rem;">Promote to:</h2>
+            <div class="promotion-options" style="display: flex; gap: 15px; justify-content: center;">
+                <div class="promo-option" data-piece="q" title="Queen">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/1/15/Chess_qlt45.svg" class="promo-img">
+                </div>
+                <div class="promo-option" data-piece="r" title="Rook">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/7/72/Chess_rlt45.svg" class="promo-img">
+                </div>
+                <div class="promo-option" data-piece="b" title="Bishop">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/b/b1/Chess_blt45.svg" class="promo-img">
+                </div>
+                <div class="promo-option" data-piece="n" title="Knight">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/7/70/Chess_nlt45.svg" class="promo-img">
+                </div>
+            </div>
+            <button id="btnCancelPromo" class="glow-btn outline small"
+                style="margin-top: 15px; font-size: 0.8rem; padding: 5px 10px; border-color: #666; color: #aaa;">Cancel</button>
+        </div>
+    </div>
+
     <script src="/socket.io/socket.io.js"></script>
     <!-- Chess.js Library -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.js"></script>
