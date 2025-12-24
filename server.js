@@ -497,15 +497,15 @@ io.on('connection', (socket) => {
             duration = payload.duration;
         } else {
             roomCode = payload;
-            duration = 7; // Default fallback
+            duration = 10; // Default fallback
         }
 
         const room = rooms[roomCode];
         if (room && room.admin === socket.id) {
             if (room.slots.white && room.slots.black) {
                 // Validate duration
-                const validDurations = [3, 5, 7];
-                const finalDuration = validDurations.includes(duration) ? duration : 7;
+                const validDurations = [3, 5, 10];
+                const finalDuration = validDurations.includes(duration) ? duration : 10;
 
                 // NOTIFY CLIENTS TO START COUNTDOWN
                 io.to(roomCode).emit('starting_countdown', { duration: 3 });
